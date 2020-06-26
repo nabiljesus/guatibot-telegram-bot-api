@@ -1,1 +1,1 @@
-web: bin/guatibot
+web: bash startApp.sh

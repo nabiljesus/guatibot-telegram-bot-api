@@ -39,13 +39,13 @@ func getSheetsService() *sheets.Service {
     // If modifying these scopes, delete your previously saved token.json.
     config, err := google.JWTConfigFromJSON(creds, "https://www.googleapis.com/auth/spreadsheets")
     if err != nil {
-            log.Fatalf("Unable to parse client secret file to config: %v", err)
+            log.Printf("Unable to parse client secret file to config: %v", err)
     }
     client := config.Client(oauth2.NoContext)
 
     srv, err := sheets.New(client)
     if err != nil {
-            log.Fatalf("Unable to retrieve Sheets client: %v", err)
+            log.Printf("Unable to retrieve Sheets client: %v", err)
     }
 
     return srv
@@ -54,7 +54,7 @@ func getSheetsService() *sheets.Service {
 func getRangeFromSheet(srv *sheets.Service, spreadsheetId string, cellsRange string) []string {
     resp, err := srv.Spreadsheets.Values.Get(spreadsheetId, cellsRange).Do()
     if err != nil {
-            log.Fatalf("Unable to retrieve data from sheet: %v", err)
+            log.Printf("Unable to retrieve data from sheet: %v", err)
     }
 
     var words[]string
@@ -103,7 +103,7 @@ func addToSheet(words []string) {
     _, err := srv.Spreadsheets.Values.Update(spreadsheetId, cellsRange, &vr).
     								   ValueInputOption("RAW").Do()
     if err != nil {
-            log.Fatalf("Unable to write data to sheet: %v", err)
+            log.Printf("Unable to write data to sheet: %v", err)
     }
 
 }
@@ -158,7 +158,7 @@ func processCommand(message *tgbotapi.Message, response *tgbotapi.MessageConfig)
 	}
 
     if err != nil {
-        log.Fatalf("Command failed with %s", err)
+        log.Printf("Command failed with %s", err)
         (*response).Text = "Nolsa, mano."
     }
 }
@@ -166,7 +166,7 @@ func processCommand(message *tgbotapi.Message, response *tgbotapi.MessageConfig)
 func main() {
 	bot, err := tgbotapi.NewBotAPI(os.Getenv("BotToken"))
 	if err != nil {
-		log.Panic(err)
+		log.Printf("Error: %s", err)
 	}
 
 	bot.Debug = true
@@ -185,7 +185,7 @@ func main() {
     }
 
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
 
 	for update := range updates {

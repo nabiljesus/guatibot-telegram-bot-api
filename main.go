@@ -49,11 +49,15 @@ func addToSheet(words []string) {
             log.Fatalf("Unable to retrieve data from sheet: %v", err)
     }
 
-    for _, resp := range resp.Values {
-    	words = append(words, resp[0].(string))
-    }
+    keys := make(map[string]bool)
 
-    sort.Strings(words)
+    for _, resp := range resp.Values {
+    	entry := resp[0].(string)
+        if _, value := keys[entry]; !value {
+            keys[entry] = true
+            words = append(words, entry)
+        }
+    }
 
     if err != nil {
             log.Fatalf("Unable to write data to sheet: %v", err)
@@ -64,10 +68,15 @@ func addToSheet(words []string) {
     var rows [][]interface{}
 
 	for _, word := range words {
-    	var row []interface{}
-		row = append(row, strings.Title(strings.TrimSpace(word)))
-    	rows = append(rows, row)
+        if _, value := keys[word]; !value {
+            keys[word] = true
+	    	var row []interface{}
+			row = append(row, strings.Title(strings.TrimSpace(word)))
+	    	rows = append(rows, row)
+		}
 	}
+
+    sort.Strings(words)
 
 	for _, row := range rows {
 		vr.Values = append(vr.Values, row)
@@ -79,6 +88,19 @@ func addToSheet(words []string) {
             log.Fatalf("Unable to write data to sheet: %v", err)
     }
 
+}
+
+func checkCommand(message *tgbotapi.Message, response *tgbotapi.MessageConfig){
+	log.Printf("MMGVOOOO\n")
+	switch message.Command() {
+	case "addToDibujadera":
+		if len(message.Text) > 17 {
+			addToSheet(strings.Split(message.Text[17:], ","))
+		}
+		(*response).Text = "Todo listo, mano."
+	default:
+		log.Printf("COMANDO! %s\n", message.Command())
+	}
 }
 
 func main() {
@@ -97,22 +119,24 @@ func main() {
 	updates, err := bot.GetUpdatesChan(u)
 
 	for update := range updates {
+		message := update.Message
+
 		if update.Message == nil { // ignore any non-Message Updates
-			continue
+			message = update.ChannelPost
+			if !strings.HasPrefix(message.Text, "@guatibot") && !message.IsCommand() {
+				continue
+			}
 		}
 
-		log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
-		
-		response := "Marico."
 
-		if strings.HasPrefix(update.Message.Text, "/addToDibujadera") {
-			addToSheet(strings.Split(update.Message.Text[17:], ","))
-			response = "Todo listo, mano."
+		//log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
+		response := tgbotapi.NewMessage(message.Chat.ID, "Marico.")
+		response.ReplyToMessageID = message.MessageID
+
+		if message.IsCommand() {
+			checkCommand(message, &response)
 		}
 
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, response)
-		msg.ReplyToMessageID = update.Message.MessageID
-
-		bot.Send(msg)
+		bot.Send(response)
 	}
 }

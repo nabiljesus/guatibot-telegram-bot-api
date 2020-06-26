@@ -142,16 +142,25 @@ func retrieveWordList() string {
     }
 }
 
+func showHelp() string {
+    return "**Guatibot Commands:** \n\n" +
+        "• **/add, /AddToDibujadera, /incluir <lista,de palabras>** - Añade lista de palabras separadas por comas.\n" +
+        "• **/palabras, /get, /fetch** - Obtiene la lista de palabras lista para pegar en skribbl.io\n" +
+        "• **/percent, /porcentaje <Nuevo porcentaje>** Cambia el porcentaje de palabras disponibles a <nuevo porcentaje>\n"
+}
+
 func processCommand(message *tgbotapi.Message, response *tgbotapi.MessageConfig){
     var err error
 
 	switch strings.ToLower(message.Command()) {
-    	case "addtodibujadera", "add", "añadir", "añade":
+    	case "addtodibujadera", "a", "add", "incluir", "incluye":
 			addToSheet(strings.Split(message.CommandArguments(), ","))
     		(*response).Text = "Todo listo, mano."
-        case "palabras", "get", "fetch":
+        case "palabras", "g", "get", "fetch":
             (*response).Text = retrieveWordList()
-        case "percent", "porcentaje":
+        case "help", "h", "ayuda", "comandos":
+            (*response).Text = showHelp()
+        case "percent", "p", "porcentaje":
             (*response).Text, err = changePercent(message.CommandArguments())
     	default:
     	   err = fmt.Errorf("Unexpected Command")
@@ -201,6 +210,7 @@ func main() {
 
 		response := tgbotapi.NewMessage(message.Chat.ID, randomInsult())
 		response.ReplyToMessageID = message.MessageID
+        response.ParseMode = "markdown"
 
 		if message.IsCommand() {
 			processCommand(message, &response)

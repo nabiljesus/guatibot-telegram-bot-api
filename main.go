@@ -66,6 +66,8 @@ func addToSheet(words []string) {
     var vr sheets.ValueRange
 
     var rows [][]interface{}
+    
+    sort.Strings(words)
 
 	for _, word := range words {
         if _, value := keys[word]; !value {
@@ -75,8 +77,6 @@ func addToSheet(words []string) {
 	    	rows = append(rows, row)
 		}
 	}
-
-    sort.Strings(words)
 
 	for _, row := range rows {
 		vr.Values = append(vr.Values, row)

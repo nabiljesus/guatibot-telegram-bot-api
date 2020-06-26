@@ -75,7 +75,7 @@ func removeDuplicates(words []string) []string {
     for _, word := range words {
         if _, value := keys[word]; !value {
             keys[word] = true
-            filteredWords = append(filteredWords, word)
+            filteredWords = append(filteredWords, strings.Title(strings.TrimSpace(word)))
         }
     }
 

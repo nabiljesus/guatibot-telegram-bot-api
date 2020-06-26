@@ -66,16 +66,20 @@ func addToSheet(words []string) {
     var vr sheets.ValueRange
 
     var rows [][]interface{}
-    
-    sort.Strings(words)
 
 	for _, word := range words {
         if _, value := keys[word]; !value {
             keys[word] = true
-	    	var row []interface{}
-			row = append(row, strings.Title(strings.TrimSpace(word)))
-	    	rows = append(rows, row)
+            words = append(words, strings.Title(strings.TrimSpace(word)))
 		}
+	}
+
+    sort.Strings(words)
+
+	for _, word := range words {
+    	var row []interface{}
+		row = append(row, word)
+    	rows = append(rows, row)
 	}
 
 	for _, row := range rows {

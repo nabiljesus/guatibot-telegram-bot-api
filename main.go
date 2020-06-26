@@ -5,7 +5,7 @@ import (
     "os"
     "strings"
     "sort"
-
+    "net/http"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 
     "golang.org/x/oauth2"
@@ -33,14 +33,10 @@ func getSheetsService() *sheets.Service {
 
 func addToSheet(words []string) {
 	srv := getSheetsService()
-
-	//srv, err := sheets.NewService(context.Background(), option.WithAPIKey("AIzaSyCHhmm8OIEOOizb0QvdMZIJleloJ1giRsM"))
     //if err != nil {
     //        log.Fatalf("Unable to retrieve Sheets client: %v", err)
     //}
 
-    // Prints the names and majors of students in a sample spreadsheet:
-    // https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
     spreadsheetId := os.Getenv("SpreadsheetId")
     cellsRange := "Palabras!A2:A"
 
@@ -117,17 +113,21 @@ func main() {
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
+	_, err = bot.SetWebhook(tgbotapi.NewWebhook(os.Getenv("UrlPath")+bot.Token))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	updates, err := bot.GetUpdatesChan(u)
+	updates := bot.ListenForWebhook("/update" + bot.Token)
+
+	go http.ListenAndServe(":" + os.Getenv("PORT"), nil)
 
 	for update := range updates {
 		message := update.Message
 
 		if update.Message == nil { // ignore any non-Message Updates
 			message = update.ChannelPost
-			if !strings.HasPrefix(message.Text, "@guatibot") && !message.IsCommand() {
+			if !strings.Contains(message.Text, "@guatibot") && !message.IsCommand() {
 				continue
 			}
 		}

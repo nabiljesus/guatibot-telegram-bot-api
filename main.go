@@ -10,12 +10,16 @@ import (
     "strconv"
     "sort"
     "net/http"
-	"github.com/go-telegram-bot-api/telegram-bot-api"
+    "unicode/utf8"
+    "github.com/go-telegram-bot-api/telegram-bot-api"
 
     "golang.org/x/oauth2"
     "golang.org/x/oauth2/google"
     "google.golang.org/api/sheets/v4"
 )
+
+const maxStrLen = 4096
+
 
 func randomInsult() string {
     rand.Seed(time.Now().Unix())
@@ -33,8 +37,23 @@ func randomInsult() string {
     return reasons[rand.Intn(len(reasons))]
 }
 
+
+func splitString(longString string) []string {
+    splits := []string{}
+
+    var l, r int
+    for l, r = 0, maxStrLen; r < len(longString); l, r = r, r+maxStrLen {
+        for !utf8.RuneStart(longString[r]) {
+            r--
+        }
+        splits = append(splits, longString[l:r])
+    }
+    splits = append(splits, longString[l:])
+    return splits
+}
+
 func getSheetsService() *sheets.Service {
-	creds := []byte(os.Getenv("GoogleCreds"))
+    creds := []byte(os.Getenv("GoogleCreds"))
 
     // If modifying these scopes, delete your previously saved token.json.
     config, err := google.JWTConfigFromJSON(creds, "https://www.googleapis.com/auth/spreadsheets")
@@ -51,7 +70,18 @@ func getSheetsService() *sheets.Service {
     return srv
 }
 
+func refreshSheet(srv *sheets.Service, spreadsheetId string) {
+    var vr sheets.ValueRange
+    var row []interface{}
+    row = append(row, "Palabras")
+    vr.Values = append(vr.Values, row)
+
+    _, _ = srv.Spreadsheets.Values.Update(spreadsheetId, "A1", &vr).
+                                       ValueInputOption("USER_ENTERED").Do()
+}
+
 func getRangeFromSheet(srv *sheets.Service, spreadsheetId string, cellsRange string) []string {
+    refreshSheet(srv, spreadsheetId)
     resp, err := srv.Spreadsheets.Values.Get(spreadsheetId, cellsRange).Do()
     if err != nil {
             log.Printf("Unable to retrieve data from sheet: %v", err)
@@ -60,8 +90,10 @@ func getRangeFromSheet(srv *sheets.Service, spreadsheetId string, cellsRange str
     var words[]string
 
     for _, resp := range resp.Values {
-        entry := resp[0].(string)
-        words = append(words, entry)
+        if len(resp) > 0 {
+            entry := resp[0].(string)
+            words = append(words, entry)
+        }
     }
 
     return words
@@ -73,9 +105,10 @@ func removeDuplicates(words []string) []string {
     var filteredWords []string
 
     for _, word := range words {
-        if _, value := keys[word]; !value {
-            keys[word] = true
-            filteredWords = append(filteredWords, strings.Title(strings.TrimSpace(word)))
+        trimmedWord := strings.TrimSpace(word)
+        if _, value := keys[trimmedWord]; !value && trimmedWord != "" {
+            keys[trimmedWord] = true
+            filteredWords = append(filteredWords, strings.Title(trimmedWord))
         }
     }
 
@@ -84,28 +117,30 @@ func removeDuplicates(words []string) []string {
     return filteredWords
 }
 
-func addToSheet(words []string) {
-	srv := getSheetsService()
+func addToSheet(words []string) error {
+    if len(words) == 0 || words[0] == "" {
+        return fmt.Errorf("Lista vacia")
+    }
+
+    srv := getSheetsService()
     spreadsheetId := os.Getenv("SpreadsheetId")
     cellsRange := "Palabras!A2:A"
 
-	existingWords := getRangeFromSheet(srv, spreadsheetId, cellsRange)
+    existingWords := getRangeFromSheet(srv, spreadsheetId, cellsRange)
     updatedWords := removeDuplicates(append(existingWords, words...))
 
     var vr sheets.ValueRange
 
-	for _, word := range updatedWords {
-    	var row []interface{}
-		row = append(row, word)
+    for _, word := range updatedWords {
+        var row []interface{}
+        row = append(row, word)
         vr.Values = append(vr.Values, row)
-	}
-
-    _, err := srv.Spreadsheets.Values.Update(spreadsheetId, cellsRange, &vr).
-    								   ValueInputOption("RAW").Do()
-    if err != nil {
-            log.Printf("Unable to write data to sheet: %v", err)
     }
 
+    _, err := srv.Spreadsheets.Values.Update(spreadsheetId, cellsRange, &vr).
+                                       ValueInputOption("RAW").Do()
+
+    return err
 }
 
 func changePercent(newPercentStr string) (string, error) {
@@ -152,19 +187,19 @@ func showHelp() string {
 func processCommand(message *tgbotapi.Message, response *tgbotapi.MessageConfig){
     var err error
 
-	switch strings.ToLower(message.Command()) {
-    	case "addtodibujadera", "a", "add", "incluir", "incluye":
-			addToSheet(strings.Split(message.CommandArguments(), ","))
-    		(*response).Text = "Todo listo, mano."
+    switch strings.ToLower(message.Command()) {
+        case "addtodibujadera", "a", "add", "incluir", "incluye":
+            err = addToSheet(strings.Split(message.CommandArguments(), ","))
+            (*response).Text = "Todo listo, mano."
         case "palabras", "g", "get", "fetch":
             (*response).Text = retrieveWordList()
         case "help", "h", "ayuda", "comandos":
             (*response).Text = showHelp()
         case "percent", "p", "porcentaje":
             (*response).Text, err = changePercent(message.CommandArguments())
-    	default:
-    	   err = fmt.Errorf("Unexpected Command")
-	}
+        default:
+           err = fmt.Errorf("Unexpected Command")
+    }
 
     if err != nil {
         log.Printf("Command failed with %s", err)
@@ -172,13 +207,20 @@ func processCommand(message *tgbotapi.Message, response *tgbotapi.MessageConfig)
     }
 }
 
-func main() {
-	bot, err := tgbotapi.NewBotAPI(os.Getenv("BotToken"))
-	if err != nil {
-		log.Printf("Error: %s", err)
-	}
+func multiMessage(bot *tgbotapi.BotAPI, response tgbotapi.MessageConfig) {
+    for _, splittedMessage := range splitString(response.Text) {
+        response.Text = splittedMessage
+        bot.Send(response)
+    }
+}
 
-	bot.Debug = true
+func main() {
+    bot, err := tgbotapi.NewBotAPI(os.Getenv("BotToken"))
+    if err != nil {
+        log.Printf("Error: %s", err)
+    }
+
+    bot.Debug = true
     log.Printf("Authorized on account %s", bot.Self.UserName)
 
     var updates tgbotapi.UpdatesChannel
@@ -193,29 +235,29 @@ func main() {
         go http.ListenAndServe(":" + os.Getenv("PORT"), nil)
     }
 
-	if err != nil {
-		log.Print(err)
-	}
+    if err != nil {
+        log.Print(err)
+    }
 
-	for update := range updates {
-		message := update.Message
+    for update := range updates {
+        message := update.Message
 
-		if update.Message == nil { // ignore any non-Message Updates
-			message = update.ChannelPost
-			if message == nil || !strings.Contains(message.Text, "@guatibot") && !message.IsCommand() {
-				continue
-			}
-		}
+        if update.Message == nil { // ignore any non-Message Updates
+            message = update.ChannelPost
+            if message == nil || !strings.Contains(message.Text, "@guatibot") && !message.IsCommand() {
+                continue
+            }
+        }
 
 
-		response := tgbotapi.NewMessage(message.Chat.ID, randomInsult())
-		response.ReplyToMessageID = message.MessageID
+        response := tgbotapi.NewMessage(message.Chat.ID, randomInsult())
+        response.ReplyToMessageID = message.MessageID
         response.ParseMode = "markdown"
 
-		if message.IsCommand() {
-			processCommand(message, &response)
-		}
+        if message.IsCommand() {
+            processCommand(message, &response)
+        }
 
-		bot.Send(response)
-	}
+        multiMessage(bot, response)
+    }
 }

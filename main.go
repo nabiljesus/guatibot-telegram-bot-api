@@ -32,6 +32,9 @@ func randomInsult() string {
         "Naaa",
         "Marico el que lo lea",
         "Pasa pack.",
+        "Cinco veces, bitch!",
+        "Burro e piquete!",
+        "Burro e pique!",
     }
     
     return reasons[rand.Intn(len(reasons))]

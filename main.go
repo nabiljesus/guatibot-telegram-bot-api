@@ -184,26 +184,44 @@ func showHelp() string {
         "• **/percent, /porcentaje <Nuevo porcentaje>** Cambia el porcentaje de palabras disponibles a <nuevo porcentaje>\n"
 }
 
-func processCommand(message *tgbotapi.Message, response *tgbotapi.MessageConfig){
+func sendEhibervoice(bot *tgbotapi.BotAPI, message *tgbotapi.Message) error {
+    msg := tgbotapi.NewVoiceUpload(message.Chat.ID, "resources/audios/ehiber-dark.ogg")
+    msg.ReplyToMessageID = message.MessageID
+
+    _, err := bot.Send(msg)
+
+    return err
+}
+
+func processCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message){
     var err error
+    var responseMessage string
+    sendMenssage := true
 
     switch strings.ToLower(message.Command()) {
         case "addtodibujadera", "a", "add", "incluir", "incluye":
             err = addToSheet(strings.Split(message.CommandArguments(), ","))
-            (*response).Text = "Todo listo, mano."
+            responseMessage = "Todo listo, mano."
         case "palabras", "g", "get", "fetch":
-            (*response).Text = retrieveWordList()
+            responseMessage = retrieveWordList()
         case "help", "h", "ayuda", "comandos":
-            (*response).Text = showHelp()
+            responseMessage = showHelp()
         case "percent", "p", "porcentaje":
-            (*response).Text, err = changePercent(message.CommandArguments())
+            responseMessage, err = changePercent(message.CommandArguments())
+        case "ehibervoice", "ev":
+            err = sendEhibervoice(bot, message)
         default:
            err = fmt.Errorf("Unexpected Command")
     }
 
     if err != nil {
         log.Printf("Command failed with %s", err)
-        (*response).Text = "Nolsa, mano."
+        responseMessage = "Nolsa, mano."
+    } else if sendMenssage {
+        response := tgbotapi.NewMessage(message.Chat.ID, responseMessage)
+        response.ReplyToMessageID = message.MessageID
+        response.ParseMode = "markdown"
+        multiMessage(bot, response)
     }
 }
 
@@ -249,15 +267,14 @@ func main() {
             }
         }
 
-
-        response := tgbotapi.NewMessage(message.Chat.ID, randomInsult())
-        response.ReplyToMessageID = message.MessageID
-        response.ParseMode = "markdown"
-
         if message.IsCommand() {
-            processCommand(message, &response)
-        }
+            processCommand(bot, message)
+        } else {
+            response := tgbotapi.NewMessage(message.Chat.ID, randomInsult())
+            response.ReplyToMessageID = message.MessageID
+            response.ParseMode = "markdown"
 
-        multiMessage(bot, response)
+            multiMessage(bot, response)
+        }
     }
 }
